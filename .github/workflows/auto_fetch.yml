@@ -1,0 +1,73 @@
+name: Fetch Remote Compose and Download Offline Images Suite
+
+on:
+  workflow_dispatch: # 支持在 GitHub Action 页面手动点击按钮触发
+    inputs:
+      compose_url:
+        description: '请输入 docker-compose.yaml 的远程 URL 地址'
+        required: true
+        default: 'https://github.com/langgenius/dify/raw/refs/heads/main/docker/docker-compose.yaml'
+        type: string
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.0
+
+      - name: Parse, Pull and Package Remote Compose Images
+        run: |
+          COMPOSE_URL="${{ github.event.inputs.compose_url }}"
+          
+          echo "=========================================="
+          echo "1. 正在下载目标 docker-compose 文件..."
+          echo "=========================================="
+          curl -sL "$COMPOSE_URL" -o downloaded-compose.yml
+          
+          if [ ! -f "downloaded-compose.yml" ] || [ ! -s "downloaded-compose.yml" ]; then
+            echo "❌ 错误: 无法下载或该 URL 返回了空文件！"
+            exit 1
+          fi
+
+          echo "=========================================="
+          echo "2. 正在动态解析镜像列表..."
+          echo "=========================================="
+          # 提取以 image: 开头的行，去掉前后的空格/引号并去重
+          mapfile -t IMAGES < <(grep -E '^[[:space:]]*-?[[:space:]]*image:' downloaded-compose.yml | awk '{print $2}' | sed 's/"//g; s/'\''//g' | sort -u)
+
+          if [ ${#IMAGES[@]} -eq 0 ]; then
+            echo "❌ 错误: 未能在下载的文件中解析到任何 image 配置，请检查 URL 是否正确。"
+            exit 1
+          fi
+
+          echo "解析成功，共找到 ${#IMAGES[@]} 个镜像："
+          for img in "${IMAGES[@]}"; do
+            echo "  - $img"
+          done
+
+          echo "=========================================="
+          echo "3. 开始并行/顺次拉取镜像..."
+          echo "=========================================="
+          for img in "${IMAGES[@]}"; do
+            echo "正在下载: $img ..."
+            docker pull "$img"
+          done
+
+          echo "=========================================="
+          echo "4. 正在合并打包并进行 gzip 极限压缩..."
+          echo "=========================================="
+          OUTPUT_NAME="compose-images.tar.gz"
+          docker save "${IMAGES[@]}" | gzip > "$OUTPUT_NAME"
+          
+          echo "=========================================="
+          echo "打包成功！离线包最终大小为："
+          du -sh "$OUTPUT_NAME"
+          echo "=========================================="
+
+      - name: Upload a Build Artifact
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: compose-images-package
+          path: compose-images.tar.gz
+          retention-days: 2 # 在 GitHub 上临时保留 2 天供你点击下载
