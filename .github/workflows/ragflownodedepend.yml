@@ -21,35 +21,23 @@ jobs:
         with:
           node-version: '24' # 自动匹配 v24 版本的 Linux 64 位环境
 
-      # 3. 验证环境（可选，方便排查问题）
-      - name: Check Environment
-        run: |
-          node -v
-          npm -v
-          echo "Current directory structure:"
-          ls -la
-
-      # 4. 安装 Node 依赖包
-      # 注意：RagFlow 的前端代码通常在类似 web/ 目录下，脚本中会先切入该目录
+      # 3. 进入 web 目录并安装依赖
       - name: Install Dependencies
         run: |
-          # 如果 RagFlow 的 package.json 在根目录，直接执行 npm install
-          # 如果在 web 子目录，请取消下面两行的注释：
-          # cd web
+          cd web
           npm install
 
-      # 5. 将 node_modules 打包压缩
+      # 4. 在 web 目录下将 node_modules 打包压缩
       - name: Tar node_modules
         run: |
-          # 如果上面切换了目录，这里也需要同步 cd web
-          # cd web
-          tar -zcvf ragflow-node-modules.tar.gz node_modules/
+          cd web
+          tar -zcvf ../ragflow-node-modules.tar.gz node_modules/
 
-      # 6. 将打包好的压缩包上传到 GitHub Actions Artifacts
+      # 5. 将打包好的压缩包上传到 GitHub Actions Artifacts
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: ragflow-offline-modules
           path: |
             ragflow-node-modules.tar.gz
-          retention-days: 7 # 在 GitHub 上保留 7 天
+          retention-days: 7
