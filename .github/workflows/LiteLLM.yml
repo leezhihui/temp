@@ -8,7 +8,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7.0.0
 
       - name: Pull, Measure and Package Images Individually
         run: |
@@ -17,6 +17,7 @@ jobs:
             "docker.litellm.ai/berriai/litellm:main-stable"
             "postgres:16"
             "prom/prometheus"
+            grafana/grafana:latest
           )
 
           echo "=========================================="
@@ -48,9 +49,9 @@ jobs:
           echo "=========================================="
 
       - name: Upload Image Artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: separate-images-package
           # 使用通配符匹配所有生成的 tar.gz 文件
           path: "*.tar.gz"
-          retention-days: 2 # 在 GitHub 上临时保留 2 天
+          retention-days: 1 # 在 GitHub 上临时保留 1 天
