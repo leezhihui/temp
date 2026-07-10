@@ -1,44 +1,145 @@
-name: Download GitLab CE Offline Images Suite
+name: Package GitLab Images
 
 on:
-  workflow_dispatch: # 支持在 GitHub Action 页面手动点击按钮触发
+  # 允许手动触发
+  workflow_dispatch:
+  # 如果需要定时运行，可以取消下面两行的注释（每周日午夜）
+  # schedule:
+  #   - cron: '0 0 * * 0'
 
 jobs:
-  build:
+  build-and-package:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout
-        uses: actions/checkout@v7.0.0
+    - name: Checkout code
+      uses: actions/checkout@v7.0.0
 
-      - name: Pull and Package GitLab CE Image
-        run: |
-          # 定义 GitLab CE 镜像
-          IMAGES=(
-            "gitlab/gitlab-ce:latest"
-          )
+    - name: Setup Kubernetes Tools
+      uses: yokawasa/action-setup-kube-tools@v0.14.0
+      with:
+        setup-tools: |
+          helm
+          yq
+        helm: 'latest'
+        yq: 'latest'
 
-          echo "=========================================="
-          echo "1. 开始拉取 GitLab CE 镜像（共 ${#IMAGES[@]} 个）..."
-          echo "=========================================="
-          for img in "${IMAGES[@]}"; do
-            echo "正在下载: $img ..."
-            docker pull "$img"
-          done
+    - name: Fetch Helm Chart and Extract Images
+      run: |
+        # 1. 添加并更新 GitLab repo
+        helm repo add gitlab https://charts.gitlab.io/
+        helm repo update
+        
+        # 2. 生成模板，并渲染您提供的基础参数以确保相关组件镜像被正确激活
+        helm template gitlab gitlab/gitlab \
+          --set global.hosts.domain=example.com \
+          --set global.hosts.externalIP=10.10.10.10 \
+          --set certmanager-issuer.email=me@example.com > template.yaml
 
-          echo "=========================================="
-          echo "2. 正在合并打包并进行 gzip 极限压缩..."
-          echo "=========================================="
-          OUTPUT_NAME="gitlab-ce-image.tar.gz"
-          docker save "${IMAGES[@]}" | gzip > "$OUTPUT_NAME"
+        # 3. 使用 yq 提取两种常见的镜像定义格式：
+        #    格式 A: 直接是 image: "repo:tag"
+        #    格式 B: 包含 repository 和 tag 对象的组合
+        yq e '.. | select(has("image")) | .image | select(tag == "!!str")' template.yaml > images_raw.txt
+        yq e '.. | select(has("image")) | .image | select(has("repository") and has("tag")) | .repository + ":" + .tag' template.yaml >> images_raw.txt
+        yq e '.. | select(has("repository") and has("tag")) | .repository + ":" + .tag' template.yaml >> images_raw.txt
+
+        # 4. 去重并清理空行与无效文本
+        sort -u images_raw.txt | grep -v '^[[:space:]]*$' | sed '/---/d' > images.txt
+        
+        echo "========================================"
+        echo "        FOUND IMAGES FOR GITLAB        "
+        echo "========================================"
+        cat images.txt
+        echo "========================================"
+
+    - name: Pull and Save Docker Images
+      run: |
+        # 5. 将文件读取为 Bash 数组
+        mapfile -t IMAGES < images.txt
+
+        # 如果没有找到任何镜像，直接退出
+        if [ ${#IMAGES[@]} -eq 0 ]; then
+          echo "Error: No images found!"
+          exit 1
+        fi
+
+        echo "=========================================="
+        echo "1. 开始拉取 GitLab 镜像（共 ${#IMAGES[@]} 个）..."
+        echo "=========================================="
+        
+        # 过滤并真正拉取的镜像列表
+        VALID_IMAGES=()
+        for img in "${IMAGES[@]}"; do
+          # 过滤掉可能误抓取的非镜像字符串（不包含冒号或斜杠的无效行）
+          if [[ "$img" != *":"* ]]; then
+            continue
+          fi
+          echo "正在下载: $img ..."
+          if docker pull "$img"; then
+            VALID_IMAGES+=("$img")
+          else
+            echo "警告: 镜像 $img 下载失败，跳过。"
+          fi
+        done
+
+        echo "=========================================="
+        echo "2. 正在合并打包并进行 gzip 极限压缩..."
+        echo "=========================================="
+        OUTPUT_NAME="gitlab-images.tar.gz"
+        docker save "${VALID_IMAGES[@]}" | gzip > "$OUTPUT_NAME"
+        
+        echo "=========================================="
+        echo "打包成功！GitLab 离线包最终大小为："
+        du -sh "$OUTPUT_NAME"
+        echo "=========================================="
+
+    - name: Upload Images Artifact
+      uses: actions/upload-artifact@v7.0.1
+      with:
+        name: gitlab-offline-images
+        path: gitlab-images.tar.gz
+        retention-days: 1
+# name: Download GitLab CE Offline Images Suite
+
+# on:
+#   workflow_dispatch: # 支持在 GitHub Action 页面手动点击按钮触发
+
+# jobs:
+#   build:
+#     runs-on: ubuntu-latest
+#     steps:
+#       - name: Checkout
+#         uses: actions/checkout@v7.0.0
+
+#       - name: Pull and Package GitLab CE Image
+#         run: |
+#           # 定义 GitLab CE 镜像
+#           IMAGES=(
+#             "gitlab/gitlab-ce:latest"
+#           )
+
+#           echo "=========================================="
+#           echo "1. 开始拉取 GitLab CE 镜像（共 ${#IMAGES[@]} 个）..."
+#           echo "=========================================="
+#           for img in "${IMAGES[@]}"; do
+#             echo "正在下载: $img ..."
+#             docker pull "$img"
+#           done
+
+#           echo "=========================================="
+#           echo "2. 正在合并打包并进行 gzip 极限压缩..."
+#           echo "=========================================="
+#           OUTPUT_NAME="gitlab-ce-image.tar.gz"
+#           docker save "${IMAGES[@]}" | gzip > "$OUTPUT_NAME"
           
-          echo "=========================================="
-          echo "打包成功！GitLab CE 离线包最终大小为："
-          du -sh "$OUTPUT_NAME"
-          echo "=========================================="
+#           echo "=========================================="
+#           echo "打包成功！GitLab CE 离线包最终大小为："
+#           du -sh "$OUTPUT_NAME"
+#           echo "=========================================="
 
-      - name: Upload a Build Artifact
-        uses: actions/upload-artifact@v7.0.1
-        with:
-          name: gitlab-ce-image-package
-          path: gitlab-ce-image.tar.gz
-          retention-days: 1 # 在 GitHub 上临时保留 1 天供你点击下载
+#       - name: Upload a Build Artifact
+#         uses: actions/upload-artifact@v7.0.1
+#         with:
+#           name: gitlab-ce-image-package
+#           path: gitlab-ce-image.tar.gz
+#           retention-days: 1 # 在 GitHub 上临时保留 1 天供你点击下载
