@@ -33,9 +33,11 @@ jobs:
         # 2. 使用 yq 提取镜像，使用 grep -v 剔除 --- 和空行
         helm template my-superset superset/superset | \
             yq e '.. | select(has("image")) | .image' - | \
-            tr -d '"' | tr -d "'" | \
-            grep -E '^[a-zA-Z0-9][a-zA-Z0-9./_:@-]+$' | \
-            sort -u > images.txt
+            tr -d '"' | tr -d "'" | grep -vE '^(---\s*|)$' | sort -u > images.txt
+          
+        # ✅ 二次检查：强制删除包含 --- 的行以及空行
+        sed -i '/---/d' images.txt
+        sed -i '/^\s*$/d' images.txt
         
         echo "========================================"
         echo "       FOUND IMAGES FOR SUPERSET        "
