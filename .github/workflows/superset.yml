@@ -32,7 +32,7 @@ jobs:
         
         # 2. 使用 yq 提取镜像，使用 grep -v 剔除 --- 和空行
         helm template my-superset superset/superset | \
-          yq e '.. | select(has("image")) | .image | select(. != null)' - | \
+          yq -o=json e '.. | select(has("image")) | .image' - | \
           sort -u > images.txt
         
         echo "========================================"
