@@ -27,7 +27,7 @@ jobs:
     - name: Fetch Helm Chart and Extract Images
       run: |
         # 1. 添加并更新 GitLab repo
-        helm repo add gitlab https://charts.github.io/
+        helm repo add gitlab https://charts.gitlab.io/
         helm repo update
         
         # 2. 生成模板（注入必需的外部服务占位符参数，以绕过新版 Chart 的严格检查）
