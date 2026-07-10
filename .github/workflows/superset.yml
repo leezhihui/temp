@@ -34,6 +34,8 @@ jobs:
         helm template my-superset superset/superset | \
           yq e '.. | select(has("image")) | .image | select(. != null)' - | \
           sort -u > images.txt
+        sed -i '/---/d' images.txt
+        sed -i '/^\s*$/d' images.txt
         
         echo "========================================"
         echo "       FOUND IMAGES FOR SUPERSET        "
