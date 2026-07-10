@@ -27,18 +27,26 @@ jobs:
     - name: Fetch Helm Chart and Extract Images
       run: |
         # 1. 添加并更新 GitLab repo
-        helm repo add gitlab https://charts.gitlab.io/
+        helm repo add gitlab https://charts.github.io/
         helm repo update
         
-        # 2. 生成模板，并渲染您提供的基础参数以确保相关组件镜像被正确激活
+        # 2. 生成模板（注入必需的外部服务占位符参数，以绕过新版 Chart 的严格检查）
         helm template gitlab gitlab/gitlab \
           --set global.hosts.domain=example.com \
           --set global.hosts.externalIP=10.10.10.10 \
-          --set certmanager-issuer.email=me@example.com > template.yaml
+          --set certmanager-issuer.email=me@example.com \
+          --set global.redis.host=redis-placeholder.local \
+          --set global.psql.host=postgres-placeholder.local \
+          --set global.psql.password.secret=postgres-secret \
+          --set global.psql.password.key=postgres-key \
+          --set global.appConfig.object_store.enabled=true \
+          --set global.appConfig.object_store.connection.secret=storage-secret \
+          --set global.appConfig.object_store.connection.key=storage-key \
+          --set registry.storage.secret=registry-storage-secret \
+          --set registry.storage.key=registry-storage-key \
+          --set gitlab.gitlab-exporter.enabled=false > template.yaml
 
-        # 3. 使用 yq 提取两种常见的镜像定义格式：
-        #    格式 A: 直接是 image: "repo:tag"
-        #    格式 B: 包含 repository 和 tag 对象的组合
+        # 3. 使用 yq 提取两种常见的镜像定义格式
         yq e '.. | select(has("image")) | .image | select(tag == "!!str")' template.yaml > images_raw.txt
         yq e '.. | select(has("image")) | .image | select(has("repository") and has("tag")) | .repository + ":" + .tag' template.yaml >> images_raw.txt
         yq e '.. | select(has("repository") and has("tag")) | .repository + ":" + .tag' template.yaml >> images_raw.txt
@@ -67,10 +75,9 @@ jobs:
         echo "1. 开始拉取 GitLab 镜像（共 ${#IMAGES[@]} 个）..."
         echo "=========================================="
         
-        # 过滤并真正拉取的镜像列表
         VALID_IMAGES=()
         for img in "${IMAGES[@]}"; do
-          # 过滤掉可能误抓取的非镜像字符串（不包含冒号或斜杠的无效行）
+          # 过滤掉可能误抓取的非镜像字符串
           if [[ "$img" != *":"* ]]; then
             continue
           fi
