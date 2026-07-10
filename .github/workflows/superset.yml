@@ -1,0 +1,66 @@
+name: Package Superset Images
+
+on:
+  # 允许手动触发
+  workflow_dispatch:
+  # 如果需要定时运行，可以取消下面两行的注释（每周日午夜）
+  # schedule:
+  #   - cron: '0 0 * * 0'
+
+jobs:
+  build-and-package:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v7.0.0
+
+    - name: Setup Kubernetes Tools
+      uses: yokawasa/action-setup-kube-tools@v0.14.0
+      with:
+        setup-tools: |
+          helm
+          yq
+        helm: 'latest'
+        yq: 'latest'
+
+    - name: Fetch Helm Chart and Extract Images
+      run: |
+        # 1. 添加并更新 repo
+        helm repo add superset https://apache.github.io/superset
+        helm repo update
+        
+        # 2. 使用 yq 精确提取所有包含 image 键的值，并进行去重和清理
+        echo "Extracting image list from helm template using yq..."
+        helm template my-superset superset/superset | yq e '.. | select(has("image")) | .image' - | tr -d '"' | tr -d "'" | sort -u > images.txt
+        
+        # 3. 在日志中高亮并输出镜像列表
+        echo "========================================"
+        echo "       FOUND IMAGES FOR SUPERSET        "
+        echo "========================================"
+        cat images.txt
+        echo "========================================"
+
+    - name: Pull and Save Docker Images
+      run: |
+        # 3. 循环拉取镜像
+        while IFS= read -r image; do
+            if [ -n "$image" ]; then
+                echo "Pulling $image..."
+                docker pull "$image"
+            fi
+        done < images.txt
+
+        # 4. 将所有镜像打包并压缩
+        echo "Saving images to tarball..."
+        docker save $(cat images.txt) -o superset-images.tar
+        
+        echo "Compressing tarball..."
+        gzip -v superset-images.tar
+
+    - name: Upload Images Artifact
+      uses: actions/upload-artifact@v7.0.1
+      with:
+        name: superset-offline-images
+        path: superset-images.tar.gz
+        retention-days: 1
