@@ -14,9 +14,9 @@ jobs:
         run: |
           IMAGES=(
             "ghcr.io/requarks/wiki:latest"
-            "postgres:16"
+            "postgres:15"
           )
-          OUTPUT_NAME="wikijs-pg16-images.tar.gz"
+          OUTPUT_NAME="wikijs-images.tar.gz"
 
           echo "=========================================="
           echo "1. 开始拉取 Wiki.js 和 PG16 镜像（共 ${#IMAGES[@]} 个）..."
