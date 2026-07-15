@@ -10,20 +10,18 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v7.0.0
 
-      # 释放磁盘空间：sglang 镜像体积巨大，必须清理默认环境腾出空间
-      - name: Free Disk Space
-        run: |
-          sudo rm -rf /usr/share/dotnet
-          sudo rm -rf /usr/local/lib/android
-          sudo rm -rf /opt/ghc
-          sudo rm -rf "/usr/local/share/boost"
-          sudo docker image prune --all --force
+      - name: Disk Space Reclaimer
+        uses: insightsengineering/disk-space-reclaimer@v1.1.2
+        with:
+          # this might remove tools that are actually needed,
+          # if set to "true" but frees about 6 GB
+          tools-cache: false
 
       - name: Pull and Package Images
         run: |
           IMAGES=(
             "lmsysorg/sglang:latest-cu130-runtime"
-            "lmsysorg/sglang:latest-cu129-runtime"
+            # "lmsysorg/sglang:latest-cu129-runtime"
           )
           OUTPUT_NAME="sglang-images.tar.gz"
 
@@ -39,7 +37,7 @@ jobs:
           echo "2. 正在合并打包并进行 gzip 极限压缩..."
           echo "=========================================="
           docker save "${IMAGES[@]}" | gzip > "$OUTPUT_NAME"
-          
+
           echo "=========================================="
           echo "打包成功！SGLang 离线包最终大小为："
           du -sh "$OUTPUT_NAME"
@@ -48,6 +46,6 @@ jobs:
       - name: Upload Artifact to GitHub
         uses: actions/upload-artifact@v7.0.1
         with:
-          name: sglang-images.tar.gz
+          name: sglang-images
           path: sglang-images.tar.gz
           retention-days: 2 # 在 GitHub 上临时保留 2 天供你点击下载
