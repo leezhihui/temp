@@ -1,0 +1,40 @@
+name: Download RAGFlow v0.26.4 Image Only
+
+on:
+  workflow_dispatch: # 支持在 GitHub Actions 页面手动点击按钮触发
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Free Disk Space
+        run: |
+          echo "正在清理 GitHub Runner 上的无用文件以确保存储空间充足..."
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf "/usr/local/share/boost"
+          df -h
+
+      - name: Pull and Save RAGFlow Image
+        run: |
+          IMAGE="infiniflow/ragflow:v0.26.4"
+
+          echo "开始拉取 $IMAGE 镜像..."
+          docker pull "$IMAGE"
+
+          echo "正在打包镜像为 tar 文件并使用 gzip 压缩..."
+          docker save "$IMAGE" | gzip > ragflow-v0.26.4.tar.gz
+
+          echo "打包完成，当前文件大小："
+          du -sh ragflow-v0.26.4.tar.gz
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ragflow-v0.26.4-image
+          path: ragflow-v0.26.4.tar.gz
+          retention-days: 2
