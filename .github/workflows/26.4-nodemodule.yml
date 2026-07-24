@@ -1,0 +1,43 @@
+name: Pack RagFlow 0.26.4 Node Modules for Offline
+
+on:
+  workflow_dispatch: # 支持手动触发运行
+
+jobs:
+  build-and-pack:
+    runs-on: ubuntu-latest # 使用 Linux 64位环境
+
+    steps:
+      # 1. 检出指定版本的 RagFlow 源码
+      - name: Checkout RagFlow v0.26.4
+        uses: actions/checkout@v4
+        with:
+          repository: 'infiniflow/ragflow'
+          ref: 'v0.26.4' # 锁定 0.26.4 版本
+
+      # 2. 安装并配置 Node.js v24
+      - name: Setup Node.js v24.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24' # 自动匹配 v24 版本的 Linux 64 位环境
+
+      # 3. 进入 web 目录并安装依赖
+      - name: Install Dependencies
+        run: |
+          cd web
+          npm install
+
+      # 4. 在 web 目录下将 node_modules 打包压缩
+      - name: Tar node_modules
+        run: |
+          cd web
+          tar -zcvf ../ragflow-v0.26.4-node-modules.tar.gz node_modules/
+
+      # 5. 将打包好的压缩包上传到 GitHub Actions Artifacts
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ragflow-v0.26.4-offline-modules
+          path: |
+            ragflow-v0.26.4-node-modules.tar.gz
+          retention-days: 7
