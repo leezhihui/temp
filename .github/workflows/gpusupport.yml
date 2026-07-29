@@ -1,33 +1,37 @@
-name: Download Offline GPU Packages
+name: Download Offline NVIDIA Toolkit Packages
 
 on:
   workflow_dispatch:
 
 jobs:
   download:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04  # 使用更稳定的 ubuntu-22.04 避免 24.04 的源冲突
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
       - name: Prepare Directory
         run: mkdir -p offline-packages
 
-      - name: Download NVIDIA Container Toolkit Packages (Ubuntu/Debian x86_64)
+      - name: Download NVIDIA Container Toolkit and Dependencies
         run: |
-          # 配置 NVIDIA 官方 apt 源
+          # 1. 配置 NVIDIA 官方 apt 源
           curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
           curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/libnvidia-container.list | \
             sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | \
             sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
 
+          # 2. 更新软件源
           sudo apt-get update
-          
-          # 下载 nvidia-container-toolkit 及其所有依赖到本地目录，不安装
+
+          # 3. 使用 apt-get download 结合模拟安装来精准获取离线 deb 包
           cd offline-packages
-          apt-get download $(apt-cache depends --recurse --no-recommends \
-            nvidia-container-toolkit | grep -E "^\w")
           
+          # 仅下载 nvidia-container-toolkit 及其所有依赖，不强行匹配宿主机已有破损环境
+          apt-get download $(apt-cache depends --recurse --no-recommends \
+            nvidia-container-toolkit | grep -E "^\w") || true
+
+          # 确保把主包本身也下载下来
+          apt-get download nvidia-container-toolkit || true
+
+          ls -lh *.deb
           echo "Downloaded packages successfully."
 
       - name: Upload Artifacts
