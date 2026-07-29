@@ -1,0 +1,37 @@
+name: Download Offline GPU Packages
+
+on:
+  workflow_dispatch:
+
+jobs:
+  download:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Prepare Directory
+        run: mkdir -p offline-packages
+
+      - name: Download NVIDIA Container Toolkit Packages (Ubuntu/Debian x86_64)
+        run: |
+          # 配置 NVIDIA 官方 apt 源
+          curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+          curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/libnvidia-container.list | \
+            sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | \
+            sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
+
+          sudo apt-get update
+          
+          # 下载 nvidia-container-toolkit 及其所有依赖到本地目录，不安装
+          cd offline-packages
+          apt-get download $(apt-cache depends --recurse --no-recommends \
+            nvidia-container-toolkit | grep -E "^\w")
+          
+          echo "Downloaded packages successfully."
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: offline-nvidia-toolkit-pkgs
+          path: offline-packages/*.deb
