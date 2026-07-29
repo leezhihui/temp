@@ -1,0 +1,42 @@
+name: Download Nvidia Device Plugin
+
+on:
+  workflow_dispatch: # 支持手动触发
+
+jobs:
+  download-resources:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Pull and Save Docker Image
+        run: |
+          IMAGE="nvcr.io/nvidia/k8s-device-plugin:v0.16.2"
+          echo "正在拉取镜像: $IMAGE"
+          docker pull $IMAGE
+          
+          echo "正在导出为 tar 压缩包..."
+          docker save $IMAGE -o k8s-device-plugin-v0.16.2.tar
+          
+          echo "镜像大小："
+          ls -lh k8s-device-plugin-v0.16.2.tar
+
+      - name: Download nvidia-device-plugin.yml
+        run: |
+          # 从 NVIDIA 官方仓库下载对应版本的 yml 配置文件
+          YAML_URL="https://raw.githubusercontent.com/NVIDIA/k8s-device-plugin/v0.16.2/deployments/static/nvidia-device-plugin.yml"
+          echo "正在下载配置文件: $YAML_URL"
+          curl -L -o nvidia-device-plugin.yml $YAML_URL
+          
+          echo "下载完成，文件内容预览："
+          head -n 20 nvidia-device-plugin.yml
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: nvidia-device-plugin-v0.16.2-assets
+          path: |
+            k8s-device-plugin-v0.16.2.tar
+            nvidia-device-plugin.yml
