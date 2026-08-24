@@ -1,0 +1,66 @@
+name: Export Kube-Prometheus-Stack Images for K8s 1.33
+
+on:
+  workflow_dispatch:
+    inputs:
+      helm_version:
+        description: 'Kube-Prometheus-Stack Helm Chart Version (Matches K8s 1.33)'
+        required: true
+        default: '88.5.2' # 适配 K8s 1.33 的最新稳定版本
+        type: string
+
+jobs:
+  download-images:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: 'latest'
+
+      - name: Add Helm Repositories & Template Chart
+        run: |
+          # 添加对应的 Helm 仓库
+          helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+          helm repo add grafana https://grafana.github.io/grafana.github.io/helm-charts
+          helm repo update
+          
+          # 渲染指定版本的 Helm Chart 清单 (会自动包含 node-exporter, kube-state-metrics 等所有子组件)
+          helm template monitoring-release prometheus-community/kube-prometheus-stack \
+            --version ${{ inputs.helm_version }} > release-manifests.yaml
+
+      - name: Extract Image List
+        id: extract-images
+        run: |
+          echo "Extracting images from Kubernetes manifests..."
+          
+          # 兼容 Kubernetes 清单中不同的缩进和 image 格式，准确提取所有镜像地址
+          grep -h "image:" release-manifests.yaml | awk '{print $2}' | tr -d '"' | tr -d "'" | sed 's/^ *//;s/ *$//' | sort -u > images.txt
+          
+          echo "=== Found the following images (including node-exporter & kube-state-metrics) ==="
+          cat images.txt
+
+      - name: Pull and Save Images to Tar
+        run: |
+          mkdir -p offline-images
+          while IFS= read -r image; do
+            if [ -n "$image" ]; then
+              echo "----------------------------------------"
+              echo "Pulling image: $image"
+              docker pull "$image" || echo "Warning: Failed to pull $image, please check if the image tag is valid."
+              
+              # 生成安全的文件名用于保存 tar 包
+              safe_name=$(echo "$image" | tr '/' '_' | tr ':' '_')
+              echo "Saving image to offline-images/${safe_name}.tar"
+              docker save "$image" -o "offline-images/${safe_name}.tar" || true
+            fi
+          done < images.txt
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: kube-prometheus-stack-images-${{ inputs.helm_version }}
+          path: offline-images/*.tar
