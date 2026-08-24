@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       helm_version:
-        description: 'Kube-Prometheus-Stack Helm Chart Version (Matches K8s 1.33)'
+        description: 'Kube-Prometheus-Stack Helm Chart Version'
         required: true
         default: '88.5.2'
         type: string
@@ -23,20 +23,18 @@ jobs:
 
       - name: Add Helm Repository & Template Chart
         run: |
-          # 仅需添加 prometheus-community 仓库（它已包含所需的 grafana、node-exporter、kube-state-metrics 等完整子图表）
           helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
           helm repo update
           
-          # 渲染 Helm Chart 清单
+          # 关键修改：加上 --kube-version 1.33.1 绕过本地环境集群版本限制
           helm template monitoring-release prometheus-community/kube-prometheus-stack \
-            --version ${{ inputs.helm_version }} > release-manifests.yaml
+            --version ${{ inputs.helm_version }} \
+            --kube-version 1.33.1 > release-manifests.yaml
 
       - name: Extract Image List
         id: extract-images
         run: |
           echo "Extracting images from Kubernetes manifests..."
-          
-          # 准确提取所有镜像地址
           grep -h "image:" release-manifests.yaml | awk '{print $2}' | tr -d '"' | tr -d "'" | sed 's/^ *//;s/ *$//' | sort -u > images.txt
           
           echo "=== Found the following images ==="
@@ -51,7 +49,6 @@ jobs:
               echo "Pulling image: $image"
               docker pull "$image" || echo "Warning: Failed to pull $image, please check if the image tag is valid."
               
-              # 生成安全的文件名用于保存 tar 包
               safe_name=$(echo "$image" | tr '/' '_' | tr ':' '_')
               echo "Saving image to offline-images/${safe_name}.tar"
               docker save "$image" -o "offline-images/${safe_name}.tar" || true
