@@ -33,20 +33,20 @@ jobs:
           # 下载指定版本的 Helm Chart (.tgz)
           helm pull prometheus-community/kube-prometheus-stack --version ${{ inputs.helm_version }} --destination offline-chart/
           
-          # 同时解压一份，方便单独提取里面的 crds 目录
+          # 解压 Chart
           tar -zxvf offline-chart/kube-prometheus-stack-${{ inputs.helm_version }}.tgz -C offline-chart/
           
-          # 将关键的 crds 目录单独复制一份到根目录，方便离线直接 apply
-          cp -r offline-chart/kube-prometheus-stack/charts/prometheus-operator/crds ./offline-crds
+          # 修正路径：新版 crds 直接在根目录的 crds/ 下
+          cp -r offline-chart/kube-prometheus-stack/crds ./offline-crds
 
       - name: Archive CRDs and Chart
         run: |
-          # 把解压后的整个 chart 目录也重新打包成 zip，方便直接离线 helm install
+          # 把解压后的整个 chart 目录打包成 zip
           cd offline-chart
           zip -r ../kube-prometheus-stack-${{ inputs.helm_version }}-source.zip kube-prometheus-stack/
           cd ..
           
-          # 把 crds 也打包
+          # 把 crds 打包
           zip -r offline-crds.zip offline-crds/
 
       - name: Upload Chart & CRDs Artifacts
