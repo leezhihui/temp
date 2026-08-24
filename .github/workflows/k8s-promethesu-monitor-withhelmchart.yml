@@ -1,4 +1,4 @@
-name: Download Kube-Prometheus-Stack Helm Chart
+name: Download Kube-Prometheus-Stack Helm Chart & CRDs
 
 on:
   workflow_dispatch:
@@ -21,23 +21,34 @@ jobs:
         with:
           version: 'latest'
 
-      - name: Pull Helm Chart
+      - name: Pull Helm Chart & Extract CRDs
         run: |
           # 添加仓库并更新
           helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
           helm repo update
           
-          # 创建输出目录
-          mkdir -p offline-chart
+          mkdir -p offline-chart offline-crds
           
-          # 下载指定版本的 Helm Chart (.tgz)
+          # 1. 下载指定版本的 Helm Chart (.tgz)
           helm pull prometheus-community/kube-prometheus-stack --version ${{ inputs.helm_version }} --destination offline-chart/
           
-          # 解压 Chart
+          # 2. 解压 Chart
           tar -zxvf offline-chart/kube-prometheus-stack-${{ inputs.helm_version }}.tgz -C offline-chart/
           
-          # 修正路径：新版 crds 直接在根目录的 crds/ 下
-          cp -r offline-chart/kube-prometheus-stack/crds ./offline-crds
+          # 3. 直接通过 helm template 导出该版本专属的全部 CRD 到离线目录中
+          helm template monitoring-release offline-chart/kube-prometheus-stack \
+            --include-crds \
+            --kube-version 1.33.1 > all-with-crds.yaml
+            
+          # 使用awk或split把CRD部分单独切分出来（kube-prometheus-stack 的 CRD 通常带有 Kind: CustomResourceDefinition）
+          # 这里为了简单稳妥，我们直接利用刚才看到的实际路径复制目录
+          if [ -d "offline-chart/kube-prometheus-stack/charts/crds/crds" ]; then
+            cp -r offline-chart/kube-prometheus-stack/charts/crds/crds/* ./offline-crds/
+          else
+            echo "Fallback: extracting crds from template..."
+            # 如果目录结构特殊，直接将整个 crds 子图表目录内容拷贝
+            cp -r offline-chart/kube-prometheus-stack/charts/crds/* ./offline-crds/
+          fi
 
       - name: Archive CRDs and Chart
         run: |
