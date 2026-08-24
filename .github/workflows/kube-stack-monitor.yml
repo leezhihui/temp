@@ -6,7 +6,7 @@ on:
       helm_version:
         description: 'Kube-Prometheus-Stack Helm Chart Version (Matches K8s 1.33)'
         required: true
-        default: '88.5.2' # 适配 K8s 1.33 的最新稳定版本
+        default: '88.5.2'
         type: string
 
 jobs:
@@ -21,14 +21,13 @@ jobs:
         with:
           version: 'latest'
 
-      - name: Add Helm Repositories & Template Chart
+      - name: Add Helm Repository & Template Chart
         run: |
-          # 添加对应的 Helm 仓库
+          # 仅需添加 prometheus-community 仓库（它已包含所需的 grafana、node-exporter、kube-state-metrics 等完整子图表）
           helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
-          helm repo add grafana https://grafana.github.io/grafana.github.io/helm-charts
           helm repo update
           
-          # 渲染指定版本的 Helm Chart 清单 (会自动包含 node-exporter, kube-state-metrics 等所有子组件)
+          # 渲染 Helm Chart 清单
           helm template monitoring-release prometheus-community/kube-prometheus-stack \
             --version ${{ inputs.helm_version }} > release-manifests.yaml
 
@@ -37,10 +36,10 @@ jobs:
         run: |
           echo "Extracting images from Kubernetes manifests..."
           
-          # 兼容 Kubernetes 清单中不同的缩进和 image 格式，准确提取所有镜像地址
+          # 准确提取所有镜像地址
           grep -h "image:" release-manifests.yaml | awk '{print $2}' | tr -d '"' | tr -d "'" | sed 's/^ *//;s/ *$//' | sort -u > images.txt
           
-          echo "=== Found the following images (including node-exporter & kube-state-metrics) ==="
+          echo "=== Found the following images ==="
           cat images.txt
 
       - name: Pull and Save Images to Tar
