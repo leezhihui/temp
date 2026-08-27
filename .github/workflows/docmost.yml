@@ -1,0 +1,56 @@
+name: Download Docmost Offline Assets
+
+on:
+  workflow_dispatch:
+    inputs:
+      docmost_version:
+        description: 'Docmost 镜像版本'
+        required: true
+        default: 'latest'
+      postgres_version:
+        description: 'PostgreSQL 镜像版本'
+        required: true
+        default: '16-alpine'
+      redis_version:
+        description: 'Redis 镜像版本'
+        required: true
+        default: '7-alpine'
+
+jobs:
+  download-images:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Create output directory
+        run: mkdir -p docmost-offline
+
+      - name: Pull Docker Images
+        run: |
+          echo "Pulling Docmost..."
+          docker pull docmost/docmost:${{ inputs.docmost_version }}
+          
+          echo "Pulling PostgreSQL..."
+          docker pull postgres:${{ inputs.postgres_version }}
+          
+          echo "Pulling Redis..."
+          docker pull redis:${{ inputs.redis_version }}
+
+      - name: Save Docker Images to Tar
+        run: |
+          docker save \
+            docmost/docmost:${{ inputs.docmost_version }} \
+            postgres:${{ inputs.postgres_version }} \
+            redis:${{ inputs.redis_version }} \
+            -o docmost-offline/docmost-images.tar
+
+      - name: Compress Bundle
+        run: |
+          tar -czvf docmost-offline-bundle.tar.gz docmost-offline/
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: docmost-offline-bundle
+          path: docmost-offline-bundle.tar.gz
