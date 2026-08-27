@@ -1,0 +1,47 @@
+name: Deploy DCGM-Exporter to Offline K8s
+
+on:
+  workflow_dispatch: # 支持手动触发
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      # 1. 配置 Kubeconfig（用于连接你的 Kubernetes 集群）
+      # 通常将集群的 kubeconfig 内容存放在 GitHub Secrets 中 (KUBE_CONFIG)
+      - name: Set up Kubeconfig
+        uses: azure/k8s-set-context@v3
+        with:
+          method: kubeconfig
+          kubeconfig: ${{ secrets.KUBE_CONFIG }}
+
+      # 2. 安装 Helm (如果 runner 没有自带)
+      - name: Set up Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: 'latest'
+
+      # 3. 添加 NVIDIA DCGM-Exporter Helm 官方仓库
+      - name: Add NVIDIA Helm Repository
+        run: |
+          helm repo add gpu-helm-charts https://nvidia.github.io/dcgm-exporter/helm-charts
+          helm repo update
+
+      # 4. 执行 Helm 部署到 K8s
+      # 针对离线环境，可以通过 --set image.repository 将镜像地址指向你们的私有镜像仓库（如 harbor.internal/nvidia/dcgm-exporter）
+      - name: Deploy DCGM-Exporter via Helm
+        run: |
+          helm upgrade --install dcgm-exporter gpu-helm-charts/dcgm-exporter \
+            --namespace gpu-monitoring \
+            --create-namespace \
+            --set image.repository="${{ secrets.PRIVATE_REGISTRY }}/nvidia/k8s/dcgm-exporter" \
+            --set image.tag="4.6.0-4.8.3-distroless" \
+            --set serviceMonitor.enabled=false
+            
+      - name: Verify Deployment
+        run: |
+          kubectl rollout status daemonset/dcgm-exporter -n gpu-monitoring --timeout=120s
+          kubectl get pods -n gpu-monitoring -l app.kubernetes.io/name=dcgm-exporter
