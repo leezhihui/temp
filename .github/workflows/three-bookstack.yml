@@ -1,0 +1,69 @@
+name: Download Wiki (Docmost/BookStack/XWiki) Offline Images
+
+on:
+  workflow_dispatch:
+    inputs:
+      app_choice:
+        description: '选择要下载的应用'
+        required: true
+        default: 'docmost'
+        type: choice
+        options:
+          - docmost
+          - bookstack
+          - xwiki
+
+jobs:
+  download-images:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Create output directory
+        run: mkdir -p offline-bundle
+
+      - name: Pull Images based on Selection
+        run: |
+          APP="${{ inputs.app_choice }}"
+          echo "正在为 $APP 拉取相关镜像..."
+
+          if [ "$APP" == "docmost" ]; then
+            docker pull docmost/docmost:latest
+            docker pull postgres:16-alpine
+            docker pull redis:7-alpine
+            
+            docker save \
+              docmost/docmost:latest \
+              postgres:16-alpine \
+              redis:7-alpine \
+              -o offline-bundle/images.tar
+
+          elif [ "$APP" == "bookstack" ]; then
+            docker pull linuxserver/bookstack:latest
+            docker pull lscr.io/linuxserver/mariadb:latest
+            
+            docker save \
+              linuxserver/bookstack:latest \
+              lscr.io/linuxserver/mariadb:latest \
+              -o offline-bundle/images.tar
+
+          elif [ "$APP" == "xwiki" ]; then
+            docker pull xwiki:lts-postgres
+            docker pull postgres:15-alpine
+            
+            docker save \
+              xwiki:lts-postgres \
+              postgres:15-alpine \
+              -o offline-bundle/images.tar
+          fi
+
+      - name: Compress Bundle
+        run: |
+          tar -czvf wiki-offline-bundle.tar.gz -C offline-bundle .
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.app_choice }}-offline-bundle
+          path: wiki-offline-bundle.tar.gz
