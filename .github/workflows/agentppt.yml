@@ -1,0 +1,34 @@
+name: Download and Package Presenton Offline
+
+on:
+  workflow_dispatch: # 支持在 GitHub 网页手动点击触发
+  schedule:
+    - cron: '0 0 * * 1' # （可选）每周一自动运行一次，确保能拿到最新镜像
+
+jobs:
+  package-docker-image:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Pull Presenton Docker Image
+        run: |
+          # 拉取官方镜像（可修改为你需要的特定版本标签，例如 :v1.0.0）
+          docker pull ghcr.io/presenton/presenton:latest
+
+      - name: Save Docker Image to Tarball
+        run: |
+          # 将镜像保存为 tar 文件
+          docker save -o presenton-image.tar ghcr.io/presenton/presenton:latest
+          
+          # 查看文件大小，确认打包成功
+          ls -lh presenton-image.tar
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: presenton-offline-image
+          path: presenton-image.tar
+          retention-days: 7 # 离线包在 GitHub 保存 7 天，足够你下载
