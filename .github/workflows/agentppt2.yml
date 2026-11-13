@@ -1,0 +1,41 @@
+name: Package PPTAgent Offline
+
+on:
+  workflow_dispatch: # 支持在 GitHub 网页手动点击触发
+  push:
+    branches:
+      - main
+
+jobs:
+  build-offline-package:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          repository: 'icip-cas/PPTAgent'
+          submodules: recursive
+
+      - name: Build Local Docker Image
+        run: |
+          # 如果仓库自带 Dockerfile，直接构建镜像
+          # 若没有 Dockerfile，也可以直接拉取社区维护的预编译镜像：forceless/pptagent:latest
+          if [ -f "Dockerfile" ]; then
+            docker build -t pptagent:latest .
+          else
+            docker pull forceless/pptagent:latest
+            docker tag forceless/pptagent:latest pptagent:latest
+          fi
+
+      - name: Save Docker Image to Tarball
+        run: |
+          # 将整个运行环境打包为离线 tar 包
+          docker save -o pptagent-offline.tar pptagent:latest
+          ls -lh pptagent-offline.tar
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pptagent-offline-package
+          path: pptagent-offline.tar
+          retention-days: 7
