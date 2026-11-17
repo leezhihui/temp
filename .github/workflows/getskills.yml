@@ -1,0 +1,40 @@
+name: Download and Package Agent Skills
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  workflow_dispatch: # 支持在 GitHub 网页上手动触发运行
+
+jobs:
+  package-skills:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Clone target skills repositories
+        run: |
+          mkdir -p skills-bundle
+          cd skills-bundle
+
+          # 1. 克隆 Anthropic 官方 Skills 仓库
+          echo "Cloning Anthropic Skills..."
+          git clone --depth 1 https://github.com/anthropics/skills.git anthropics-skills
+
+          # 2. 克隆 frontend-slides 排版专家 Skill
+          echo "Cloning frontend-slides..."
+          git clone --depth 1 https://github.com/zarazhangrui/frontend-slides.git frontend-slides
+
+          # 清理不必要的 .git 目录以减小压缩包体积（可选）
+          rm -rf anthropics-skills/.git frontend-slides/.git
+
+      - name: Compress skills bundle
+        run: |
+          tar -czf agent-skills-bundle.tar.gz skills-bundle/
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-skills-package
+          path: agent-skills-bundle.tar.gz
