@@ -1,0 +1,41 @@
+name: Package AIPPT Offline Image
+
+on:
+  workflow_dispatch: # 支持在 GitHub 网页手动点击触发
+
+jobs:
+  build-aippt:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Cherzing/AIPPT
+        uses: actions/checkout@v4
+        with:
+          repository: 'Cherzing/AIPPT'
+          ref: 'main'
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker Image
+        run: |
+          # Cherzing/AIPPT 使用 Dockerfile.dev 进行构建
+          if [ -f "Dockerfile.dev" ]; then
+            docker build -f Dockerfile.dev -t aippt:latest .
+          elif [ -f "Dockerfile" ]; then
+            docker build -t aippt:latest .
+          else
+            echo "Error: No Dockerfile found!" && exit 1
+          fi
+
+      - name: Save Docker Image to Tarball
+        run: |
+          # 将编译好的庞大环境整体打包为 tar 包
+          docker save -o aippt-offline.tar aippt:latest
+          ls -lh aippt-offline.tar
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: aippt-offline-package
+          path: aippt-offline.tar
+          retention-days: 7
