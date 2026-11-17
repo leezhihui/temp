@@ -1,0 +1,74 @@
+name: Package Rancher Offline Bundle
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  workflow_dispatch: # 支持手动触发
+
+jobs:
+  build-rancher-offline:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Pull and Save Rancher Docker Image
+        run: |
+          # 你可以修改为你需要的 Rancher 版本，例如 v2.8.5
+          RANCHER_VERSION="latest"
+          
+          echo "Pulling rancher/rancher:${RANCHER_VERSION}..."
+          docker pull rancher/rancher:${RANCHER_VERSION}
+          
+          echo "Saving image to tar..."
+          docker save rancher/rancher:${RANCHER_VERSION} -o rancher-image.tar
+
+      - name: Prepare Offline Deployment Bundle
+        run: |
+          mkdir -p rancher-offline-deploy
+          mv rancher-image.tar rancher-offline-deploy/
+          
+          # 自动生成一键启动的 docker-compose.yml
+          cat << 'EOF' > rancher-offline-deploy/docker-compose.yml
+          version: '3'
+          services:
+            rancher:
+              image: rancher/rancher:latest
+              container_name: rancher-server
+              restart: unless-stopped
+              ports:
+                - "80:80"
+                - "443:443"
+              privileged: true
+          EOF
+
+          # 生成离线机器上的加载脚本
+          cat << 'EOF' > rancher-offline-deploy/install.sh
+          #!/bin/bash
+          echo "正在导入 Rancher 离线 Docker 镜像..."
+          docker load -i rancher-image.tar
+          
+          echo "正在启动 Rancher 服务..."
+          docker-compose up -d
+          
+          echo "=========================================="
+          echo "Rancher 启动成功！请通过 https://<你的离线机器IP> 访问"
+          echo "初始管理员密码查看命令: docker logs rancher-server 2>&1 | grep "Bootstrap Password""
+          echo "=========================================="
+          EOF
+          
+          chmod +x rancher-offline-deploy/install.sh
+
+      - name: Compress into a single tar.gz
+        run: |
+          tar -czf rancher-offline-package.tar.gz -C rancher-offline-deploy .
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rancher-offline-bundle
+          path: rancher-offline-package.tar.gz
